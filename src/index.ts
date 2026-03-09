@@ -4,9 +4,10 @@ import { cache } from 'hono/cache';
 import { GetAlbumQuery, OldGetAlbumQuery } from './queries/album';
 import { GetAlbumTracksQuery } from './queries/track';
 import { GetArtistInsights, GetArtistQuery } from './queries/artist';
+import { GetPlaylistQuery, OldGetPlaylistQuery } from './queries/playlist';
 import { spotifyRequest } from './spotify';
 
-const app = new Hono<{ Bindings: CloudflareBindings }>()
+const app = new Hono()
 
 app.use("/:query", cors());
 app.use("/:query", cache({cacheName: "cache", cacheControl: "max-age=21600"}))
@@ -23,7 +24,9 @@ app.get("/:query", async (c) => {
     new OldGetAlbumQuery(id),
     new GetAlbumTracksQuery(id),
     new GetArtistQuery(id),
-    new GetArtistInsights(id)
+    new GetArtistInsights(id),
+    new GetPlaylistQuery(id),
+    new OldGetPlaylistQuery(id)
   ];
 
   const userQuery = c.req.param("query");
@@ -33,8 +36,12 @@ app.get("/:query", async (c) => {
   }
 
   try {
-    const response = await spotifyRequest(c.env.KV, query);
-    const union = response.data.artistUnion || response.data.albumUnion;
+    const response = await spotifyRequest(query);
+    console.log('Response:', JSON.stringify(response, null, 2));
+    if (!response.data) {
+      return c.json({success: false, data: `No data in response: ${JSON.stringify(response)}`}, 500);
+    }
+    const union = response.data.artistUnion || response.data.albumUnion || response.data.playlistUnion;
     if (union === undefined || union.__typename === "NotFound") {
       return c.json({success: false, data: `id not found: ${id}`}, 404)
     }
