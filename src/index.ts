@@ -4,6 +4,7 @@ import { cache } from 'hono/cache';
 import { GetAlbumQuery, OldGetAlbumQuery } from './queries/album';
 import { GetAlbumTracksQuery } from './queries/track';
 import { GetArtistInsights, GetArtistQuery } from './queries/artist';
+import { GetPlaylistQuery } from './queries/playlist';
 import { spotifyRequest } from './spotify';
 
 const app = new Hono<{ Bindings: CloudflareBindings }>()
@@ -23,7 +24,8 @@ app.get("/:query", async (c) => {
     new OldGetAlbumQuery(id),
     new GetAlbumTracksQuery(id),
     new GetArtistQuery(id),
-    new GetArtistInsights(id)
+    new GetArtistInsights(id),
+    new GetPlaylistQuery(id)
   ];
 
   const userQuery = c.req.param("query");
@@ -33,9 +35,12 @@ app.get("/:query", async (c) => {
   }
 
   try {
-    const response = await spotifyRequest(c.env.KV, query);
-    const union = response.data.artistUnion || response.data.albumUnion;
-    if (union === undefined || union.__typename === "NotFound") {
+    const response = await spotifyRequest(query);
+    const data = response.data;
+    const union = data.artistUnion || data.albumUnion || data.playlistUnion;
+    const playlist = data.playlistV2;
+
+    if ((union === undefined && playlist === undefined) || union?.__typename === "NotFound" || playlist === null) {
       return c.json({success: false, data: `id not found: ${id}`}, 404)
     }
 

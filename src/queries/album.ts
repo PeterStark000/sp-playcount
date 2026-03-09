@@ -211,36 +211,44 @@ export class OldGetAlbumQuery extends GetAlbumQuery {
         const responseJson = json.data.albumUnion;
         const uri = responseJson.uri;
         const name = responseJson.name;
-        const cover = { uri: responseJson.coverArt.sources[0].url };
+        const cover = { uri: responseJson.coverArt?.sources?.[0]?.url };
         const date = new Date(responseJson.date.isoString);
         const year = date.getUTCFullYear();
-        const month = date.getUTCMonth();
+        const month = date.getUTCMonth() + 1;
         const day = date.getUTCDate();
         const trackCount = responseJson.tracks.totalCount;
-        const artists = responseJson.artists.items.map((artist: { profile: { name: any; }; id: string; }) => (
+        const albumArtists = responseJson.artists.items.map((artist: { profile: { name: any; }; id: string; }) => (
             {
                 name: artist.profile.name,
                 uri: "spotify:artist:" + artist.id,
                 image: { uri: ""} // Not implemented
             }
         ));
-        const discs = responseJson.discs.items.map((disc: { number: any; }) => ({
+        const discs = responseJson.discs.items.map((disc: { number: number; }) => ({
             number: disc.number,
             name: name,
-            tracks: responseJson.tracks.items.filter((track: { track: { discNumber: any; }; }) => track.track.discNumber == disc.number).map((track: { track: { uri: any; playcount: string; name: any; trackNumber: any; duration: { totalMilliseconds: any; }; contentRating: { label: string; }; playability: { playable: any; }; }; }) => ({
-                uri: track.track.uri,
-                playcount: parseInt(track.track.playcount),
-                name: track.track.name,
-                popularity: 0, // Not implemented
-                number: track.track.trackNumber,
-                duration: track.track.duration.totalMilliseconds,
-                explicit: track.track.contentRating.label === "EXPLICIT",
-                playable: track.track.playability.playable,
-                artists: artists, // Not implemented
-            }))
+            tracks: responseJson.tracks.items
+                .filter((item: { track: any; }) => item.track && item.track.discNumber == disc.number)
+                .map((item: { track: any; }) => {
+                    const track = item.track;
+                    return {
+                        uri: track.uri,
+                        playcount: parseInt(track.playcount || "0"),
+                        name: track.name,
+                        popularity: 0, // Not implemented
+                        number: track.trackNumber,
+                        duration: track.duration?.totalMilliseconds || 0,
+                        explicit: track.contentRating?.label === "EXPLICIT",
+                        playable: track.playability?.playable ?? false,
+                        artists: track.artists.items.map((artist: { uri: string; profile: { name: string; }}) => ({
+                            uri: artist.uri,
+                            name: artist.profile.name
+                        })),
+                    }
+                })
         }));
         const related = { releases: [] }; // Not implemented
-        const copyrights = responseJson.copyright.items.map((copyright: { text: any }) => copyright.text)
+        const copyrights = responseJson.copyright.items.map((copyright: { text: string }) => copyright.text)
         const label = responseJson.label;
         const albumType = responseJson.type;
 
@@ -254,7 +262,7 @@ export class OldGetAlbumQuery extends GetAlbumQuery {
             track_count: trackCount,
             discs: discs,
             copyrights: copyrights,
-            artists: artists,
+            artists: albumArtists,
             related: related,
             type: albumType,
             label: label
