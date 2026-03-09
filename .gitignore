@@ -40,3 +40,4 @@ pnpm-lock.yaml
 wrangler.jsonc
 wrangler.toml
 worker-configuration.d.ts
+.vercel

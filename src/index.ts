@@ -5,17 +5,29 @@ import { GetAlbumQuery, OldGetAlbumQuery } from './queries/album';
 import { GetAlbumTracksQuery } from './queries/track';
 import { GetArtistInsights, GetArtistQuery } from './queries/artist';
 import { GetPlaylistQuery } from './queries/playlist';
+import { GetAGStatsQuery } from './queries/agstats';
 import { spotifyRequest } from './spotify';
 
 const app = new Hono<{ Bindings: CloudflareBindings }>()
 
 app.use("/:query", cors());
-app.use("/:query", cache({cacheName: "cache", cacheControl: "max-age=21600"}))
+app.use("/:query", (c, next) => {
+  if (c.req.query("cache") === "false") {
+    return next();
+  }
+  return cache({cacheName: "cache", cacheControl: "max-age=21600"})(c, next);
+});
 app.get("/:query", async (c) => {
-  const id = c.req.query("id") || c.req.query("albumid") || c.req.query("artistid");
+  const userQuery = c.req.param("query");
+  let id = c.req.query("id") || c.req.query("albumid") || c.req.query("artistid");
+
   if (id === undefined) {
-    return c.json({success: false, data: "id is not defined in the query"}, 400);
-  } else if (id.length != 22) {
+    if (userQuery === "AGStats") {
+      id = "";
+    } else {
+      return c.json({success: false, data: "id is not defined in the query"}, 400);
+    }
+  } else if (id.length != 22 && userQuery !== "AGStats") {
     return c.json({success: false, data: "id must have a length of 22 characters"}, 400);
   }
 
@@ -25,10 +37,10 @@ app.get("/:query", async (c) => {
     new GetAlbumTracksQuery(id),
     new GetArtistQuery(id),
     new GetArtistInsights(id),
-    new GetPlaylistQuery(id)
+    new GetPlaylistQuery(id),
+    new GetAGStatsQuery()
   ];
 
-  const userQuery = c.req.param("query");
   const query = queries.find(query => query.endpoint === userQuery);
   if (query === undefined) {
     return c.json({success: false, data: `Query not found: ${userQuery}`}, 404);
@@ -46,6 +58,9 @@ app.get("/:query", async (c) => {
 
     try {
       const parsed = query.parseResponse(response);
+      if (userQuery === "AGStats") {
+        return c.text(parsed as unknown as string);
+      }
       return c.json({success: true, data: parsed});
     } catch (e) {
       return c.json({success: false, data: `Error when parsing response: ${e}`}, 500)
